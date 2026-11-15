@@ -4,3 +4,7 @@ gunicorn==23.0.0
 pyodbc==5.2.0
 azure-identity==1.19.0
 python-dotenv==1.0.1
+# Alternativa 100% Python (SQL_DRIVER=pytds), útil en Mac
+python-tds==1.17.1
+pyOpenSSL==26.4.0
+certifi==2026.10.23

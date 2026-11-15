@@ -38,10 +38,13 @@ def health_db():
 @app.get("/prueba")
 def leer_tabla_prueba():
     """Lee la tabla de prueba (créala antes con sql/01_crear_tabla_prueba.sql)."""
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT TOP 50 Id, Nombre, CreadoEn FROM dbo.Prueba ORDER BY Id")
         return [
-            {"id": r.Id, "nombre": r.Nombre, "creado_en": str(r.CreadoEn)}
+            {"id": r[0], "nombre": r[1], "creado_en": str(r[2])}
             for r in cur.fetchall()
         ]
+    finally:
+        conn.close()

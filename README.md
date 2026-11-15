@@ -70,6 +70,10 @@ Abre <http://localhost:8000/health/db>, <http://localhost:8000/prueba> y <http:/
 
 ### Si falla
 
+> **Mac con chip Apple:** si sale `OpenSSL library could not be loaded`, agrega
+> `SQL_DRIVER=pytds` a tu `.env`. Usa una conexión 100% Python (también cifrada y
+> validando el certificado) que no necesita el driver ODBC.
+
 | Mensaje | Solución |
 |---|---|
 | `Cannot open server ... requested by the login. Client with IP address ... is not allowed` | Agrega esa IP en el firewall (Paso 1) |
