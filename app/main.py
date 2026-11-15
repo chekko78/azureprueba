@@ -2,16 +2,20 @@
 import logging
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
+from app import explorer
 from app.db import check_connection, get_connection
 
 log = logging.getLogger("uvicorn.error")
 app = FastAPI(title="Azure SQL - Prueba de conectividad")
+app.include_router(explorer.router)
 
 
 @app.get("/")
 def root():
+    if explorer.enabled():
+        return RedirectResponse("/explorar")
     return {"mensaje": "La aplicación está en línea", "probar_bd": "/health/db"}
 
 
