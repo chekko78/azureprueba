@@ -10,7 +10,8 @@ set -euo pipefail
 
 APP="${1:?Uso: ./deploy_azure.sh <nombre-de-la-app>   (ej. ./deploy_azure.sh atecno-prueba)}"
 SQL_SERVER_NAME="${SQL_SERVER_NAME:-atecno}"   # servidor SQL (NO se modifica ninguna base)
-SKU="${SKU:-B1}"                               # tamaño del servidor web
+SKU="${SKU:-B1}"                               # tamaño del servidor web (F1 = gratis, para pruebas)
+# LOCATION=<region> permite crear la app en otra región (por defecto, la del servidor SQL)
 PLAN="plan-$APP"
 
 cd "$(dirname "$0")"
@@ -36,7 +37,7 @@ az account show >/dev/null 2>&1 || { echo "❌ Primero inicia sesión con: az lo
 echo "▶ Buscando el servidor SQL '$SQL_SERVER_NAME'..."
 RG="$(az sql server list --query "[?name=='$SQL_SERVER_NAME'].resourceGroup | [0]" -o tsv)"
 [ -n "$RG" ] || { echo "❌ No encontré el servidor SQL '$SQL_SERVER_NAME' en esta suscripción."; exit 1; }
-LOC="$(az sql server show -g "$RG" -n "$SQL_SERVER_NAME" --query location -o tsv)"
+LOC="${LOCATION:-$(az sql server show -g "$RG" -n "$SQL_SERVER_NAME" --query location -o tsv)}"
 echo "  Grupo de recursos: $RG | Región: $LOC"
 
 echo "▶ Plan de App Service ($PLAN, $SKU, Linux)..."
