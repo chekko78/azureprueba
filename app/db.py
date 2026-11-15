@@ -76,9 +76,37 @@ def _connect_odbc():
 
 # ---------- pytds (100% Python) ----------
 
+def _validate_host(cert, name: bytes) -> bool:
+    """Verifica que el certificado TLS pertenezca al servidor al que nos conectamos.
+
+    Reemplaza la función de pytds, que usa una API que ya no existe en pyOpenSSL reciente.
+    Acepta nombres exactos y comodines en la primera posición (p. ej. *.database.windows.net).
+    """
+    from cryptography import x509
+    from cryptography.x509.oid import ExtensionOID, NameOID
+
+    crt = cert.to_cryptography()
+    host = name.decode("ascii").lower().rstrip(".")
+    try:
+        names = crt.extensions.get_extension_for_oid(
+            ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+        ).value.get_values_for_type(x509.DNSName)
+    except x509.ExtensionNotFound:
+        names = [a.value for a in crt.subject.get_attributes_for_oid(NameOID.COMMON_NAME)]
+    for n in (n.lower().rstrip(".") for n in names):
+        if n == host:
+            return True
+        if n.startswith("*.") and "." in host and host.split(".", 1)[1] == n[2:]:
+            return True
+    return False
+
+
 def _connect_pytds():
     import certifi
     import pytds
+    import pytds.tls
+
+    pytds.tls.validate_host = _validate_host
 
     if _auth() != "sql":
         raise RuntimeError("SQL_DRIVER=pytds solo admite AZURE_SQL_AUTH=sql")
