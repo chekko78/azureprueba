@@ -1,0 +1,16 @@
+{
+  "name": "Golf Campestre",
+  "short_name": "Golf",
+  "description": "Score de golf y torneos",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f5c37",
+  "theme_color": "#0f5c37",
+  "lang": "es",
+  "icons": [
+    {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

@@ -23,7 +23,8 @@ DB_SERVER="$(env_get AZURE_SQL_SERVER)"
 DB_NAME="$(env_get AZURE_SQL_DATABASE)"
 DB_USER="$(env_get AZURE_SQL_USER)"
 DB_PASS="$(env_get AZURE_SQL_PASSWORD)"
-for v in DB_SERVER DB_NAME DB_USER DB_PASS; do
+ADMIN_PW="$(env_get ADMIN_PASSWORD)"
+for v in DB_SERVER DB_NAME DB_USER DB_PASS ADMIN_PW; do
   [ -n "${!v}" ] || { echo "❌ Falta un dato en .env ($v)"; exit 1; }
 done
 if [ "$DB_NAME" != "test" ]; then
@@ -54,11 +55,15 @@ az webapp config set -g "$RG" -n "$APP" --min-tls-version 1.2 --ftps-state Disab
   --startup-file "gunicorn --bind=0.0.0.0 --timeout 120 --workers 2 -k uvicorn.workers.UvicornWorker app.main:app" \
   -o none
 
-echo "▶ Configuración de la conexión (se guarda cifrada en Azure, no en el código)..."
+echo "▶ Configuración (se guarda cifrada en Azure, no en el código)..."
+# Llave para firmar sesiones: se crea una sola vez y se conserva en despliegues siguientes.
+SECRET="$(az webapp config appsettings list -g "$RG" -n "$APP" --query "[?name=='SECRET_KEY'].value | [0]" -o tsv 2>/dev/null || true)"
+[ -n "$SECRET" ] || SECRET="$(openssl rand -hex 32)"
 az webapp config appsettings set -g "$RG" -n "$APP" -o none --settings \
   "AZURE_SQL_SERVER=$DB_SERVER" "AZURE_SQL_DATABASE=$DB_NAME" "AZURE_SQL_PORT=1433" \
   "AZURE_SQL_AUTH=sql" "AZURE_SQL_USER=$DB_USER" "AZURE_SQL_PASSWORD=$DB_PASS" \
-  "SQL_DRIVER=${DEPLOY_SQL_DRIVER:-odbc}" "ENABLE_DB_BROWSER=false" "SCM_DO_BUILD_DURING_DEPLOYMENT=true"
+  "SQL_DRIVER=${DEPLOY_SQL_DRIVER:-odbc}" "ENABLE_DB_BROWSER=false" \
+  "ADMIN_PASSWORD=$ADMIN_PW" "SECRET_KEY=$SECRET" "SCM_DO_BUILD_DURING_DEPLOYMENT=true"
 
 echo "▶ Firewall: permitir SOLO las IPs de salida de esta app hacia el servidor SQL..."
 IPS="$(az webapp show -g "$RG" -n "$APP" --query possibleOutboundIpAddresses -o tsv | tr ',' ' ')"
@@ -81,7 +86,8 @@ for i in $(seq 1 20); do
   if RESP="$(curl -fsS --max-time 60 "$URL/health/db" 2>/dev/null)"; then
     echo "✅ ¡Publicada y conectada!"
     echo "   $RESP"
-    echo "   Abre: $URL/prueba  y  $URL/docs"
+    echo "   Abre la app: $URL"
+    echo "   En el iPhone: ábrela en Safari → Compartir → Agregar a pantalla de inicio"
     exit 0
   fi
   sleep 15

@@ -1,145 +1,141 @@
-# Azure SQL – Prueba de conectividad (Python + FastAPI)
+# Golf Campestre – score y torneos (web app para iPhone + Azure SQL)
 
-Aplicación web mínima para comprobar que nos conectamos de forma **rápida y segura**
-a la base de datos `test` de Azure SQL, antes de construir la aplicación completa.
+Web app instalable en iPhone para llevar el score de golf en los recorridos del
+Club Campestre Monterrey (Silla / Mitras, Mitras / Sierra, Sierra / Silla), con
+torneos, leaderboard en vivo y apuestas. Los datos viven en la base **`test`** de Azure SQL.
 
-## Por qué esta tecnología
+## Qué hace
 
-| Elección | Motivo |
+| Función | Detalle |
 |---|---|
-| **Python + FastAPI** | Rápido, moderno, fácil de mantener; documentación automática en `/docs` |
-| **ODBC Driver 18 (pyodbc)** | Driver oficial de Microsoft para Azure SQL; conexión cifrada (TLS) obligatoria |
-| **Pool de conexiones** | Reutiliza conexiones: las consultas siguientes tardan milisegundos |
-| **Azure App Service (Linux)** | Hosting administrado con HTTPS incluido, en la misma región que la BD (baja latencia) |
-| **Identidad administrada** | En producción, la app entra a la BD **sin contraseña** guardada en ningún lado |
+| **Torneos** | Grupos de salida (hoyo 1 o 10, hora), cada grupo con su **PIN de 6 dígitos** para capturar |
+| **Captura hoyo por hoyo** | Botones grandes + / −, golpes de ventaja por hoyo, putts y fairways opcionales |
+| **Sin señal** | Lo capturado se guarda en el teléfono y se envía solo cuando regresa la señal |
+| **Leaderboard en vivo** | Gross, neto y Stableford; se actualiza cada 20 s; tarjeta completa de cada jugador |
+| **Handicap** | Sistema mundial (WHS): Index × Slope/113 + (Rating − Par), con % de handicap por torneo |
+| **Apuestas por grupo** | Match (individual o parejas a mejor bola), Nassau (ida, vuelta y total) y Skins con acumulado |
+| **Historial y estadísticas** | Rondas por jugador, promedio, mejor ronda, putts/hoyo, % fairways, % greens en regulación |
+| **Administración** | Recorridos (par, handicap y yardas por hoyo; rating y slope por salida), jugadores y torneos |
+
+## Arquitectura y seguridad
+
+```
+iPhone (Safari / app en pantalla de inicio)
+        │  HTTPS
+        ▼
+Servidor web (FastAPI, Python)  ──cifrado TLS──►  Azure SQL (base test, usuario app_test)
+```
+
+- El teléfono **nunca** se conecta directo a la base ni guarda su contraseña.
+- La conexión a Azure SQL va cifrada y valida el certificado del servidor.
+- El administrador entra con contraseña (`ADMIN_PASSWORD`). Los capturistas usan el PIN de su grupo
+  y solo pueden capturar ese grupo, solo mientras el torneo esté abierto.
+- Las sesiones usan tokens firmados (HMAC) que vencen. Hay límite de intentos de contraseña y PIN.
+- Todas las consultas a la base son parametrizadas.
+- El usuario `app_test` solo existe en la base `test` y no puede ver `atecnodb`.
 
 ## Estructura
 
 ```
-app/db.py                          Conexión a Azure SQL (cifrada, pool, SQL o Entra ID)
-app/main.py                        API web: /, /health, /health/db, /prueba
-scripts/test_connection.py         Prueba de conexión desde la terminal
-sql/01_crear_tabla_prueba.sql      Crea la tabla dbo.Prueba con 3 registros
-sql/02_usuario_identidad_administrada.sql   Acceso sin contraseña (producción)
-startup.sh                         Comando de arranque para el servidor web
-.env.example                       Plantilla de configuración
+app/main.py               Arranque de la app, cabeceras de seguridad
+app/db.py                 Conexión a Azure SQL (odbc o pytds)
+app/golf/calc.py          Cálculos: handicap, neto, Stableford, leaderboard, match, nassau, skins
+app/golf/api.py           API /api/... (pública, captura con PIN y administración)
+app/golf/servicio.py      Lectura de datos y armado de resultados
+app/golf/auth.py          Contraseña de admin, PIN de grupo, tokens y límite de intentos
+app/static/               Web app (HTML/CSS/JS), manifest, service worker e íconos
+sql/10_golf_esquema.sql   Tablas de golf y los 3 recorridos del club
+tests/                    Pruebas (cálculos y de punta a punta)
+deploy_azure.sh           Publica en Azure App Service con un comando
 ```
 
 ---
 
-## Paso 1 – Preparar Azure (Portal)
+## 1. Crear las tablas en Azure (una sola vez)
 
-1. **Firewall del servidor SQL**: Portal → *Servidor SQL* → **Redes** →
-   - *Agregar la dirección IPv4 del cliente* (tu IP actual) → **Guardar**.
-2. **Crear la tabla de prueba**: Portal → *Base de datos `test`* → **Editor de consultas** →
-   pega y ejecuta `sql/01_crear_tabla_prueba.sql`.
+1. Portal de Azure → **SQL databases** → **test** → **Editor de consultas**. Entra como administrador.
+2. Abre `sql/10_golf_esquema.sql`, copia **todo** su contenido, pégalo y da clic en **Ejecutar**.
+3. Al final verás los 3 recorridos con 18 hoyos y 5 salidas cada uno.
 
-## Paso 2 – Probar la conectividad desde tu computadora
+El script se niega a correr si no estás en la base `test`. Se puede volver a ejecutar sin problema.
 
-Requisitos: Python 3.11+ y **ODBC Driver 18 for SQL Server**
-([descarga para Windows/macOS/Linux](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server)).
+## 2. Configurar `.env`
+
+Agrega a tu `.env` una contraseña de administrador:
+
+```
+ADMIN_PASSWORD=una-contraseña-fuerte
+```
+
+## 3. Probar en tu Mac
 
 ```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
+git pull
+```
+
+```bash
+source .venv/bin/activate
+```
+
+```bash
 pip install -r requirements.txt
-cp .env.example .env        # en Windows: copy .env.example .env
 ```
-
-Edita `.env` con tu servidor, base, usuario y contraseña. Luego:
-
-```bash
-python -m scripts.test_connection
-```
-
-Resultado esperado:
-
-```
-✅ Conexión exitosa en 450 ms
-   base_de_datos: test
-   usuario: ...
-```
-
-Y la API web local:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Abre <http://localhost:8000/health/db>, <http://localhost:8000/prueba> y <http://localhost:8000/docs>.
+Abre <http://localhost:8000>.
 
-### Si falla
-
-> **Mac con chip Apple:** si sale `OpenSSL library could not be loaded`, agrega
-> `SQL_DRIVER=pytds` a tu `.env`. Usa una conexión 100% Python (también cifrada y
-> validando el certificado) que no necesita el driver ODBC.
-
-| Mensaje | Solución |
-|---|---|
-| `Cannot open server ... requested by the login. Client with IP address ... is not allowed` | Agrega esa IP en el firewall (Paso 1) |
-| `Login failed for user` | Usuario/contraseña incorrectos |
-| `Can't open lib 'ODBC Driver 18 for SQL Server'` | Instala el ODBC Driver 18 |
-| `Login timeout expired` | Red/puerto 1433 bloqueado por tu red corporativa |
-
----
-
-## Paso 3 – Publicar en un servidor web (Azure App Service)
-
-Se recomienda App Service Linux en la **misma región** que la base de datos.
-Con [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) instalado, desde la carpeta del proyecto:
+**Para verla en tu iPhone desde la misma red Wi-Fi**, arranca así:
 
 ```bash
-az login
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Luego abre en Safari del iPhone `http://IP-DE-TU-MAC:8000`. La IP la ves en *Ajustes del Sistema → Red*.
+El modo sin señal solo funciona cuando la app está publicada con HTTPS (paso 5).
+
+## 4. Primer uso (Administración)
+
+1. **Admin** → contraseña.
+2. **Recorridos** → captura el **par** y el **handicap** de los 18 hoyos de cada recorrido con la
+   **tarjeta oficial del club**, y revisa el rating/slope de cada salida.
+   Los valores de rating/slope precargados vienen de internet (GolfPass) y hay que verificarlos.
+3. **Jugadores** → da de alta a cada jugador con su handicap index.
+4. **Torneos** → crea el torneo, sus grupos (cada uno recibe un PIN), inscribe jugadores
+   (el handicap de juego se calcula solo) y, si quieren, apuestas.
+5. Entrega a cada grupo su PIN. En el campo: **Capturar score de mi grupo** → PIN → hoyo por hoyo.
+
+## 5. Publicar en Azure e instalar en el iPhone
+
+```bash
+./deploy_azure.sh atecno-golf
+```
+
+El script crea el servidor web, guarda la configuración cifrada en Azure, autoriza en el firewall
+solo las IPs de la app y publica. Hoy está bloqueado por la **cuota de App Service** de la suscripción:
+hay que pedirla a Microsoft (ver historial del proyecto).
+
+En el iPhone: abre `https://atecno-golf.azurewebsites.net` en **Safari** → botón **Compartir** →
+**Agregar a pantalla de inicio**. Queda como una app con su ícono.
+
+## Pruebas
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ```bash
-az webapp up --name <nombre-unico-app> --resource-group <tu-grupo> --location <region-de-tu-bd> --runtime "PYTHON:3.12" --sku B1
+pytest -q
 ```
 
-```bash
-az webapp config set --name <nombre-unico-app> --resource-group <tu-grupo> --startup-file "startup.sh"
-```
+Las pruebas de punta a punta (`tests/test_api_e2e.py`) necesitan un SQL Server con el esquema
+y se activan con `GOLF_E2E=1`.
 
-### 3a. Configuración (sin subir el `.env`)
+## Diagnóstico de conexión
 
-Para la primera prueba puedes usar usuario/contraseña (se guardan cifrados en App Service):
-
-```bash
-az webapp config appsettings set --name <nombre-unico-app> --resource-group <tu-grupo> --settings AZURE_SQL_SERVER=<servidor>.database.windows.net AZURE_SQL_DATABASE=test AZURE_SQL_AUTH=sql AZURE_SQL_USER=<usuario> AZURE_SQL_PASSWORD=<contraseña> SCM_DO_BUILD_DURING_DEPLOYMENT=true
-```
-
-Permite que los servicios de Azure lleguen a la BD: Portal → *Servidor SQL* → **Redes** →
-marcar *Permitir que los servicios y recursos de Azure accedan a este servidor*.
-
-Prueba: `https://<nombre-unico-app>.azurewebsites.net/health/db`
-
-### 3b. Producción: sin contraseñas (identidad administrada)
-
-1. Activa la identidad de la app:
-   ```bash
-   az webapp identity assign --name <nombre-unico-app> --resource-group <tu-grupo>
-   ```
-2. Portal → *Servidor SQL* → **Microsoft Entra ID** → define un administrador de Entra.
-3. Conectado como ese administrador, ejecuta `sql/02_usuario_identidad_administrada.sql`.
-4. Cambia la configuración y borra la contraseña:
-   ```bash
-   az webapp config appsettings set --name <nombre-unico-app> --resource-group <tu-grupo> --settings AZURE_SQL_AUTH=entra
-   ```
-   ```bash
-   az webapp config appsettings delete --name <nombre-unico-app> --resource-group <tu-grupo> --setting-names AZURE_SQL_USER AZURE_SQL_PASSWORD
-   ```
-
-Recomendaciones extra de seguridad: activar **Solo HTTPS** en App Service y, más adelante,
-usar *Private Endpoint* para que la BD no tenga acceso público.
-
----
-
-## Endpoints
-
-| Ruta | Qué hace |
-|---|---|
-| `GET /` | La app está en línea |
-| `GET /health` | Salud de la app (sin tocar la BD) |
-| `GET /health/db` | Conecta a Azure SQL y devuelve base, usuario, versión y hora del servidor |
-| `GET /prueba` | Lee los registros de `dbo.Prueba` |
-| `GET /docs` | Documentación interactiva |
+- `python -m scripts.test_connection`: prueba la conexión a Azure SQL desde la terminal.
+- `/health/db`: estado de la conexión desde la app.
+- `/explorar`: explorador de tablas de solo lectura. Solo funciona en local; en Azure está apagado.
+- **Mac con chip Apple:** si sale `OpenSSL library could not be loaded`, usa `SQL_DRIVER=pytds` en `.env`.

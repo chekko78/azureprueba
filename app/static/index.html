@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f5c37">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Golf">
+<link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="stylesheet" href="/static/styles.css?v=1">
+<title>Golf Campestre</title>
+</head>
+<body>
+<header id="top">
+  <button id="atras" class="icono" aria-label="Atrás" hidden>‹</button>
+  <h1 id="titulo">Golf Campestre</h1>
+  <span id="estado-red" class="pill" hidden></span>
+</header>
+<main id="app"><div class="cargando">Cargando…</div></main>
+<nav id="nav">
+  <a href="#/" data-tab="torneos"><span>🏆</span>Torneos</a>
+  <a href="#/jugadores" data-tab="jugadores"><span>👤</span>Jugadores</a>
+  <a href="#/admin" data-tab="admin"><span>⚙️</span>Admin</a>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js?v=1"></script>
+</body>
+</html>
